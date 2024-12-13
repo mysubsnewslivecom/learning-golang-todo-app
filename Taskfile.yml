@@ -1,0 +1,77 @@
+version: "3"
+
+env:
+  GOBASE:
+    sh: pwd
+  GOPATH: "{{.GOBASE}}/vendor:{{.GOBASE}}:{{.GOBASE}}/cmd"
+  GOBIN: "{{.GOBASE}}/bin"
+  VERSION:
+    sh: echo "$(git describe --abbrev=0 --tags 2> /dev/null)"
+  BUILD:
+    sh: git rev-parse --short HEAD
+
+vars:
+  VERSION: '{{.VERSION | default "0.0.1"}}'
+  LDFLAGS: "-ldflags '-X=main.Version={{.VERSION}} -X=main.Build={{.BUILD}}'"
+  PROJECT_NAME: '{{.PROJECTNAME| default "todo-app" }}'
+
+tasks:
+  default:
+    summary: |
+      List available tasks.
+
+      This is the default task that executes when no specific task is provided.
+    cmd: task --list
+    silent: true
+
+  install:
+    aliases: [i]
+    desc: Install necessary packages
+    summary: |
+      Install necessary packages.
+
+      This task will call the language-server task to ensure the Go language server is installed.
+    cmds:
+      - task: language-server
+
+  language-server:
+    aliases: [ls]
+    desc: Install go language server
+    summary: |
+      Install the Go language server (gopls).
+
+      This task will install the latest version of gopls, which provides IDE features for Go development.
+    cmd: go install -v golang.org/x/tools/gopls@latest
+
+  download-vault:
+    desc: Download and install vault
+    aliases: [v]
+    env:
+      VAULT_VERSION: 1.18.1
+    cmd: |
+      echo "Downloading file from https://releases.hashicorp.com/vault/${VAULT_VERSION}/vault_${VAULT_VERSION}_linux_amd64.zip... "
+      curl -fsSL --url https://releases.hashicorp.com/vault/${VAULT_VERSION}/vault_${VAULT_VERSION}_linux_amd64.zip \
+      -o /tmp/vault.zip \
+      && unzip -o /tmp/vault.zip vault -d  ~/.local/bin
+    preconditions:
+      - sh: "! command -v vault"
+        msg: ~/.local/bin/vault already exists
+    ignore_error: true
+    silent: true
+
+  echo:
+    cmds:
+      - echo "GOPATH=$GOPATH"
+      - echo "GOBIN=$GOBIN"
+      - echo "VERSION={{.VERSION}}"
+      - echo "LDFLAGS={{.LDFLAGS}}"
+      - echo "PROJECT_NAME={{.PROJECT_NAME}}"
+    silent: true
+
+  build:
+    desc: "Build go {{.PROJECT_NAME}}"
+    aliases: [b]
+    cmds:
+      - task: echo
+      - |
+        go build {{.LDFLAGS}} -o {{.GOBIN}}/{{.PROJECT_NAME}} {{.GOBASE}}/cmd/main.go
